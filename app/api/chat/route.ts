@@ -1,8 +1,14 @@
 import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export async function POST(request: Request) {
   try {
@@ -18,24 +24,46 @@ export async function POST(request: Request) {
     const selectedSource =
       typeof source === "string" ? source : "All Sources";
 
+    const { data: sources, error: searchError } = await supabase
+      .from("islamic_sources")
+      .select("source_type, tradition, title, author, reference, content")
+      .or(
+        `tradition.eq.${selectedSource},source_type.eq.${selectedSource}`
+      )
+      .limit(5);
+
+    if (searchError) {
+      console.error("Supabase error:", searchError);
+    }
+
+    const sourceText =
+      sources && sources.length > 0
+        ? sources
+            .map(
+              (item) =>
+                `Source: ${item.title}\nAuthor: ${item.author || "Unknown"}\nReference: ${item.reference || "Not provided"}\nContent: ${item.content}`
+            )
+            .join("\n\n")
+        : "No matching database sources were found.";
+
     const systemPrompt = `
 You are an Islamic information assistant.
 
-The user selected this answer preference:
+The user selected:
 ${selectedSource}
 
-Follow these rules carefully:
+Use the database sources below when relevant:
 
+${sourceText}
+
+Rules:
 1. Distinguish Qur'an, Hadith, fiqh/madhhab, and broader scholarly traditions.
-2. If the selected source is a fiqh school or scholarly tradition, clearly label the answer as that tradition's position.
-3. Do not present a disputed fiqh position as universally agreed upon.
-4. If different Islamic traditions have different views, explain the differences respectfully.
-5. Do not invent Qur'an verses, Hadith references, scholars, books, chapter numbers, or Hadith grading.
-6. If you are not confident about a specific reference, say so rather than making one up.
-7. Give concise but useful answers.
-8. For sensitive religious rulings or fatwa matters, remind the user that a qualified scholar can provide case-specific guidance.
-9. Treat Wahhabi / Najdi reform tradition as a scholarly/reform tradition, not as a separate fiqh madhhab.
-10. Treat Deobandi, Barelvi, and Ahl-e-Hadith as broader scholarly traditions rather than automatically treating them as separate madhhabs.
+2. Never invent references.
+3. Never claim a database source exists if it does not.
+4. If the database has no relevant source, clearly say that no matching database source was found.
+5. If scholars or schools differ, explain the differences respectfully.
+6. Treat Wahhabi / Najdi reform tradition as a scholarly/reform tradition, not a separate fiqh madhhab.
+7. Treat Deobandi, Barelvi, and Ahl-e-Hadith as broader scholarly traditions rather than automatically treating them as separate madhhabs.
 `;
 
     const response = await openai.responses.create({

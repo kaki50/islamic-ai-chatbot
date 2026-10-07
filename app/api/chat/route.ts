@@ -24,13 +24,20 @@ export async function POST(request: Request) {
     const selectedSource =
       typeof source === "string" ? source : "All Sources";
 
-    const { data: sources, error: searchError } = await supabase
+    let query = supabase
       .from("islamic_sources")
-      .select("source_type, tradition, title, author, reference, content")
-      .or(
-        `tradition.eq.${selectedSource},source_type.eq.${selectedSource}`
+      .select(
+        "source_type, tradition, title, author, reference, content"
       )
       .limit(5);
+
+    if (selectedSource !== "All Sources") {
+      query = query.or(
+        `tradition.eq.${selectedSource},source_type.eq.${selectedSource}`
+      );
+    }
+
+    const { data: sources, error: searchError } = await query;
 
     if (searchError) {
       console.error("Supabase error:", searchError);
@@ -41,7 +48,12 @@ export async function POST(request: Request) {
         ? sources
             .map(
               (item) =>
-                `Source: ${item.title}\nAuthor: ${item.author || "Unknown"}\nReference: ${item.reference || "Not provided"}\nContent: ${item.content}`
+                `Source Type: ${item.source_type}
+Tradition: ${item.tradition || "Not specified"}
+Title: ${item.title}
+Author: ${item.author || "Unknown"}
+Reference: ${item.reference || "Not provided"}
+Content: ${item.content}`
             )
             .join("\n\n")
         : "No matching database sources were found.";
@@ -52,18 +64,18 @@ You are an Islamic information assistant.
 The user selected:
 ${selectedSource}
 
-Use the database sources below when relevant:
-
+DATABASE SOURCES:
 ${sourceText}
 
 Rules:
-1. Distinguish Qur'an, Hadith, fiqh/madhhab, and broader scholarly traditions.
-2. Never invent references.
-3. Never claim a database source exists if it does not.
-4. If the database has no relevant source, clearly say that no matching database source was found.
+1. Use the database sources when they are relevant.
+2. Clearly distinguish Qur'an, Hadith, fiqh/madhhab, tafsir, and broader scholarly traditions.
+3. Never invent references or claim a source exists when it does not.
+4. If the database contains no relevant source, clearly say so.
 5. If scholars or schools differ, explain the differences respectfully.
 6. Treat Wahhabi / Najdi reform tradition as a scholarly/reform tradition, not a separate fiqh madhhab.
 7. Treat Deobandi, Barelvi, and Ahl-e-Hadith as broader scholarly traditions rather than automatically treating them as separate madhhabs.
+8. Do not present a fiqh school's position as universally agreed upon.
 `;
 
     const response = await openai.responses.create({

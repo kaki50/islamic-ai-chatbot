@@ -1,3 +1,4 @@
+```tsx
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 
@@ -24,46 +25,53 @@ export async function POST(request: Request) {
     const selectedSource =
       typeof source === "string" ? source : "All Sources";
 
-    let query = supabase
-      .from("islamic_sources")
-      .select(
-        "source_type, tradition, title, author, reference, content"
-      )
-      .limit(5);
+    // Create an embedding for the user's question.
+    const embeddingResponse = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: message,
+    });
 
-    // All Sources = search all database records.
-    // Other selections = filter by source/tradition.
-    if (selectedSource !== "All Sources") {
-      query = query.or(
-        `tradition.eq.${selectedSource},source_type.eq.${selectedSource}`
-      );
-    }
+    const queryEmbedding = embeddingResponse.data[0].embedding;
 
-    const { data: sources, error: searchError } = await query;
+    // Search for the most relevant database sources.
+    const { data: matchedSources, error: searchError } =
+      await supabase.rpc("match_islamic_sources", {
+        query_embedding: queryEmbedding,
+        match_count: 10,
+      });
 
     if (searchError) {
-      console.error("Supabase error:", searchError);
+      console.error("Supabase search error:", searchError);
 
       return Response.json(
-        {
-          error: "Database search failed.",
-          details: searchError.message,
-        },
+        { error: "Database search failed." },
         { status: 500 }
       );
     }
 
+    // Apply the user's selected source/tradition filter.
+    const sources = (matchedSources || []).filter((item) => {
+      if (selectedSource === "All Sources") return true;
+
+      return (
+        item.tradition === selectedSource ||
+        item.source_type === selectedSource
+      );
+    });
+
     const sourceText =
-      sources && sources.length > 0
+      sources.length > 0
         ? sources
             .map(
-              (item) =>
-                `Source Type: ${item.source_type}
+              (item) => `Source Type: ${item.source_type}
+Category: ${item.category || "Not specified"}
 Tradition: ${item.tradition || "Not specified"}
-Title: ${item.title}
+Title: ${item.title || "Not provided"}
 Author: ${item.author || "Unknown"}
 Reference: ${item.reference || "Not provided"}
-Content: ${item.content}`
+Arabic Text: ${item.arabic_text || "Not provided"}
+Content: ${item.content || "Not provided"}
+Similarity: ${item.similarity ?? "Not available"}`
             )
             .join("\n\n")
         : "No matching database sources were found.";
@@ -78,15 +86,14 @@ DATABASE SOURCES:
 ${sourceText}
 
 Rules:
-1. Use the database sources when relevant.
-2. Clearly distinguish Qur'an, Hadith, fiqh/madhhab, tafsir, and broader scholarly traditions.
-3. Never invent references.
-4. Never claim that a database source exists when it does not.
-5. If the database has no relevant source for the question, clearly say so.
-6. If scholars or schools differ, explain the differences respectfully.
-7. Treat Wahhabi / Najdi reform tradition as a scholarly/reform tradition, not a separate fiqh madhhab.
-8. Treat Deobandi, Barelvi, and Ahl-e-Hadith as broader scholarly traditions rather than automatically treating them as separate madhhabs.
-9. Do not present one fiqh school's position as universally agreed upon.
+1. Use the supplied database sources when relevant.
+2. Never invent Qur'an verses, Hadith, references, quotations, or source details.
+3. If the database has no relevant source, clearly say that no relevant source was found in the current database. You may provide general information separately, but clearly label it as general information not verified against the database.
+4. Clearly distinguish Qur'an, Hadith, fiqh/madhhab, tafsir, and broader scholarly traditions.
+5. Explain scholarly differences respectfully and do not present one school's view as universal agreement.
+6. Treat Wahhabi / Najdi reform tradition as a scholarly/reform tradition, not a separate fiqh madhhab.
+7. Treat Deobandi, Barelvi, and Ahl-e-Hadith as broader scholarly traditions rather than automatically treating them as separate madhhabs.
+8. Do not claim that a source was verified unless the supplied database content supports that claim.
 `;
 
     const response = await openai.responses.create({
@@ -115,3 +122,4 @@ Rules:
     );
   }
 }
+```

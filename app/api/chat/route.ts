@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       );
     });
 
-  ```tsx
+
     const sourceText =
       sources && sources.length > 0
         ? sources

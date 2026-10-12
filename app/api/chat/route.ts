@@ -59,22 +59,26 @@ export async function POST(request: Request) {
       );
     });
 
+  ```tsx
     const sourceText =
-      sources.length > 0
+      sources && sources.length > 0
         ? sources
-            .map(
-              (item) => `Source Type: ${item.source_type}
-Category: ${item.category || "Not specified"}
-Tradition: ${item.tradition || "Not specified"}
-Title: ${item.title || "Not provided"}
-Author: ${item.author || "Unknown"}
-Reference: ${item.reference || "Not provided"}
-Arabic Text: ${item.arabic_text || "Not provided"}
-Content: ${item.content || "Not provided"}
-Similarity: ${item.similarity ?? "Not available"}`
+            .map((item) =>
+              [
+                "Source Type: " + (item.source_type || "Not specified"),
+                "Category: " + (item.category || "Not specified"),
+                "Tradition: " + (item.tradition || "Not specified"),
+                "Title: " + (item.title || "Not provided"),
+                "Author: " + (item.author || "Unknown"),
+                "Reference: " + (item.reference || "Not provided"),
+                "Arabic Text: " + (item.arabic_text || "Not provided"),
+                "Content: " + (item.content || "Not provided"),
+                "Similarity: " + (item.similarity ?? "Not available"),
+              ].join("\n")
             )
             .join("\n\n")
         : "No matching database sources were found.";
+```
 
     const systemPrompt = `
 You are an Islamic information assistant.

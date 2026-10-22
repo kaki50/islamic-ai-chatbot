@@ -1,18 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
 
 export default function Home() {
   const [message, setMessage] = useState("");
-  const [answer, setAnswer] = useState("");
+  const [chat, setChat] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [source, setSource] = useState("All Sources");
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chat, loading]);
 
   async function sendMessage() {
-    if (!message.trim()) return;
+    const text = message.trim();
+    if (!text || loading) return;
 
+    const historyToSend = chat.slice(-10);
+    const userTurn: ChatMessage = { role: "user", content: text };
+
+    setChat((prev) => [...prev, userTurn]);
+    setMessage("");
     setLoading(true);
-    setAnswer("");
 
     try {
       const response = await fetch("/api/chat", {
@@ -21,23 +36,35 @@ export default function Home() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          message,
+          message: text,
           source,
+          history: historyToSend,
         }),
       });
 
       const data = await response.json();
 
-      if (!response.ok) {
-        setAnswer(data.error || "Something went wrong.");
-      } else {
-        setAnswer(data.answer);
-      }
+      const reply: ChatMessage = {
+        role: "assistant",
+        content: response.ok
+          ? data.answer
+          : data.error || "Something went wrong.",
+      };
+
+      setChat((prev) => [...prev, reply]);
     } catch {
-      setAnswer("Unable to connect to AI.");
+      setChat((prev) => [
+        ...prev,
+        { role: "assistant", content: "Unable to connect to AI." },
+      ]);
     }
 
     setLoading(false);
+  }
+
+  function startNewChat() {
+    setChat([]);
+    setMessage("");
   }
 
   return (
@@ -87,12 +114,59 @@ export default function Home() {
       </label>
 
       <br />
+      <br />
+
+      {chat.length > 0 && (
+        <div style={{ marginBottom: "30px" }}>
+          {chat.map((turn, index) =>
+            turn.role === "user" ? (
+              <div
+                key={index}
+                style={{
+                  marginBottom: "15px",
+                  padding: "15px",
+                  background: "#f2f2f2",
+                  borderRadius: "10px",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                <strong>You:</strong>
+                <p style={{ marginBottom: 0 }}>{turn.content}</p>
+              </div>
+            ) : (
+              <div
+                key={index}
+                style={{
+                  marginBottom: "15px",
+                  padding: "20px",
+                  border: "1px solid #ddd",
+                  borderRadius: "10px",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                <h2 style={{ marginTop: 0 }}>Answer</h2>
+                <p style={{ marginBottom: 0 }}>{turn.content}</p>
+              </div>
+            )
+          )}
+
+          {loading && <p>Thinking...</p>}
+
+          <div ref={bottomRef} />
+        </div>
+      )}
 
       <textarea
         value={message}
         onChange={(e) => setMessage(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+          }
+        }}
         placeholder="Ask your Islamic question..."
-        rows={6}
+        rows={4}
         style={{
           width: "100%",
           padding: "15px",
@@ -115,19 +189,19 @@ export default function Home() {
         {loading ? "Thinking..." : "Send"}
       </button>
 
-      {answer && (
-        <div
+      {chat.length > 0 && (
+        <button
+          onClick={startNewChat}
+          disabled={loading}
           style={{
-            marginTop: "30px",
-            padding: "20px",
-            border: "1px solid #ddd",
-            borderRadius: "10px",
-            whiteSpace: "pre-wrap",
+            padding: "12px 25px",
+            fontSize: "16px",
+            marginLeft: "10px",
+            cursor: "pointer",
           }}
         >
-          <h2>Answer</h2>
-          <p>{answer}</p>
-        </div>
+          New Chat
+        </button>
       )}
 
       <p style={{ marginTop: "40px", fontSize: "13px", color: "#666" }}>

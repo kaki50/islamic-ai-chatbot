@@ -146,6 +146,7 @@ Rules:
 8. Never claim a source was verified unless the supplied database content supports that claim.
 9. Language: Detect the language AND script of the user's message and reply in the same language and script (for example: Roman Urdu written in Latin letters → reply in Roman Urdu; Urdu written in Arabic script → reply in Urdu script; Arabic → Arabic; English → English). When citing Arabic source texts, quote the Arabic briefly and explain it in the user's language. If the language is unclear, default to English.
 10. Conversation: The messages above the final user message are the earlier conversation. Use them to understand follow-up questions and references (for example "uski misaal do" refers to the earlier topic). Answer consistently with what you said before, but treat the DATABASE SOURCES supplied with the current message as the authority for facts and references.
+11. Writing style: Write in simple, everyday language that an ordinary person can read easily. In Roman Urdu, use plain Latin letters the way people normally type (write "nikah", "misaal", "maloomat") and do NOT use transliteration symbols or special letters (no ʿ, ā, ī, ū, ṭ, ḍ, ṣ, ḥ or similar marks) in any language. Prefer common everyday words over heavy scholarly terms, and keep sentences short and clear.
 `;
 
     const response = await openai.responses.create({

@@ -12,7 +12,7 @@ const supabase = createClient(
 
 export async function POST(request: Request) {
   try {
-    const { message, source } = await request.json();
+    const { message, source, history } = await request.json();
 
     if (!message || typeof message !== "string") {
       return Response.json(
@@ -24,9 +24,37 @@ export async function POST(request: Request) {
     const selectedSource =
       typeof source === "string" ? source : "All Sources";
 
+    // Conversation history (for follow-up questions). Keep only valid
+    // user/assistant turns, most recent last, capped for safety.
+    const cleanHistory: { role: "user" | "assistant"; content: string }[] =
+      Array.isArray(history)
+        ? history
+            .filter(
+              (item) =>
+                item &&
+                (item.role === "user" || item.role === "assistant") &&
+                typeof item.content === "string" &&
+                item.content.trim().length > 0
+            )
+            .slice(-10)
+            .map((item) => ({
+              role: item.role as "user" | "assistant",
+              content: item.content.slice(0, 4000),
+            }))
+        : [];
+
+    // For retrieval, include the previous user question so short
+    // follow-ups ("give an example", "aur batao") still find sources.
+    const previousUserMessage = [...cleanHistory]
+      .reverse()
+      .find((item) => item.role === "user")?.content;
+    const retrievalText = previousUserMessage
+      ? previousUserMessage + "\n" + message
+      : message;
+
     const embeddingResponse = await openai.embeddings.create({
       model: "text-embedding-3-small",
-      input: message,
+      input: retrievalText,
     });
 
     const queryEmbedding = embeddingResponse.data[0].embedding;
@@ -92,6 +120,8 @@ Rules:
 6. Treat Wahhabi / Najdi reform tradition as a scholarly/reform tradition, not a separate fiqh madhhab.
 7. Treat Deobandi, Barelvi, and Ahl-e-Hadith as broader scholarly traditions rather than automatically treating them as separate madhhabs.
 8. Never claim a source was verified unless the supplied database content supports that claim.
+9. Language: Detect the language AND script of the user's message and reply in the same language and script (for example: Roman Urdu written in Latin letters → reply in Roman Urdu; Urdu written in Arabic script → reply in Urdu script; Arabic → Arabic; English → English). When citing Arabic source texts, quote the Arabic briefly and explain it in the user's language. If the language is unclear, default to English.
+10. Conversation: The messages above the final user message are the earlier conversation. Use them to understand follow-up questions and references (for example "uski misaal do" refers to the earlier topic). Answer consistently with what you said before, but treat the DATABASE SOURCES supplied with the current message as the authority for facts and references.
 `;
 
     const response = await openai.responses.create({
@@ -101,6 +131,7 @@ Rules:
           role: "system",
           content: systemPrompt,
         },
+        ...cleanHistory,
         {
           role: "user",
           content: message,

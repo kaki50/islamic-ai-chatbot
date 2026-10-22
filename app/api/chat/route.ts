@@ -48,9 +48,33 @@ export async function POST(request: Request) {
     const previousUserMessage = [...cleanHistory]
       .reverse()
       .find((item) => item.role === "user")?.content;
-    const retrievalText = previousUserMessage
+    const rawRetrievalText = previousUserMessage
       ? previousUserMessage + "\n" + message
       : message;
+
+    // Rewrite the question into a short English search query before
+    // embedding. The database sources are embedded mainly from English
+    // summaries and Arabic text, so non-English questions (Roman Urdu,
+    // Urdu, etc.) retrieve poorly when embedded raw. The final answer is
+    // still generated from the original message in the user's language.
+    let retrievalText = rawRetrievalText;
+    try {
+      const rewrite = await openai.responses.create({
+        model: "gpt-5-mini",
+        input: [
+          {
+            role: "system",
+            content:
+              "You rewrite a user's question into a short English search query for an Islamic sources database (Qur'an, Hadith, tafsir, fiqh). If the question is already in English, return it lightly cleaned. Translate Roman Urdu, Urdu, Arabic and other languages into clear English, keeping names, book names and references. Output ONLY the search query, nothing else.",
+          },
+          { role: "user", content: rawRetrievalText },
+        ],
+      });
+      const rewritten = rewrite.output_text?.trim();
+      if (rewritten) retrievalText = rewritten;
+    } catch {
+      // If the rewrite fails, fall back to the raw question text.
+    }
 
     const embeddingResponse = await openai.embeddings.create({
       model: "text-embedding-3-small",

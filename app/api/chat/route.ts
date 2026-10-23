@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "crypto";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -10,6 +11,9 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+// Free plan: this many questions per day (Pakistan time). Premium: no limit.
+const FREE_DAILY_LIMIT = 10;
+
 export async function POST(request: Request) {
   try {
     const { message, source, history } = await request.json();
@@ -18,6 +22,54 @@ export async function POST(request: Request) {
       return Response.json(
         { error: "Please enter a question." },
         { status: 400 }
+      );
+    }
+
+    // ----- Plan & daily-limit check -----
+    // Logged-in users are counted per account; guests per connection (IP).
+    // Premium accounts are never counted. If anything in this check
+    // fails, the chat still works (we never block on an error here).
+    let usage: {
+      allowed: boolean;
+      plan: string;
+      remaining: number | null;
+    } = { allowed: true, plan: "free", remaining: null };
+    try {
+      let userId: string | null = null;
+      const authHeader = request.headers.get("authorization") || "";
+      if (authHeader.startsWith("Bearer ")) {
+        const { data } = await supabase.auth.getUser(authHeader.slice(7));
+        if (data?.user) userId = data.user.id;
+      }
+      const ipRaw = (request.headers.get("x-forwarded-for") || "local")
+        .split(",")[0]
+        .trim();
+      const ipHash = createHash("sha256")
+        .update(ipRaw)
+        .digest("hex")
+        .slice(0, 32);
+      const todayPkt = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Karachi",
+      }).format(new Date());
+      const { data: usageData, error: usageError } = await (
+        supabase as any
+      ).rpc("charge_usage", {
+        p_user: userId,
+        p_ip: ipHash,
+        p_day: todayPkt,
+        p_limit: FREE_DAILY_LIMIT,
+      });
+      if (!usageError && usageData) {
+        usage = usageData;
+      }
+    } catch {
+      // Fail open: a broken limit check must never break the chat.
+    }
+
+    if (!usage.allowed) {
+      return Response.json(
+        { error: "limit_reached", plan: usage.plan, limit: FREE_DAILY_LIMIT },
+        { status: 429 }
       );
     }
 
@@ -167,6 +219,11 @@ Rules:
 
     return Response.json({
       answer: response.output_text,
+      usage: {
+        plan: usage.plan,
+        remaining: usage.remaining,
+        limit: FREE_DAILY_LIMIT,
+      },
     });
   } catch (error) {
     console.error("API error:", error);

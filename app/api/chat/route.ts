@@ -150,7 +150,70 @@ export async function POST(request: Request) {
       );
     }
 
-    const sources = (matchedSources || []).filter((item) => {
+    // --- Retrieval safety nets (both fail-safe) ---
+    // The vector index search is approximate and the question rewrite
+    // varies slightly from run to run, so a relevant source (most
+    // often a fact row) can occasionally be missed. Two extra nets:
+    // 1. also search with the RAW question text and merge the results;
+    // 2. an exact (non-approximate) check over the small fact
+    //    categories — its best rows go first.
+    let mergedSources: any[] = matchedSources || [];
+    try {
+      if (rawRetrievalText.trim() !== retrievalText.trim()) {
+        const rawEmb = await openai.embeddings.create({
+          model: "text-embedding-3-small",
+          input: rawRetrievalText,
+        });
+        const { data: rawMatches } = await supabase.rpc(
+          "match_islamic_sources",
+          {
+            query_embedding: rawEmb.data[0].embedding,
+            match_count: 10,
+          }
+        );
+        if (rawMatches && rawMatches.length > 0) {
+          const byKey = new Map<string, any>();
+          for (const item of [...mergedSources, ...rawMatches]) {
+            const key = String(item.id ?? item.title ?? "");
+            const prev = byKey.get(key);
+            if (!prev || (item.similarity ?? 0) > (prev.similarity ?? 0)) {
+              byKey.set(key, item);
+            }
+          }
+          mergedSources = [...byKey.values()]
+            .sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0))
+            .slice(0, 12);
+        }
+      }
+    } catch {
+      // Keep the primary results.
+    }
+
+    try {
+      const { data: factMatches } = await (supabase as any).rpc(
+        "match_facts_exact",
+        {
+          query_embedding: queryEmbedding,
+          match_threshold: 0.5,
+          match_count: 3,
+        }
+      );
+      if (factMatches && factMatches.length > 0) {
+        const factKeys = new Set(
+          factMatches.map((f: any) => String(f.id ?? f.title ?? ""))
+        );
+        mergedSources = [
+          ...factMatches,
+          ...mergedSources.filter(
+            (item) => !factKeys.has(String(item.id ?? item.title ?? ""))
+          ),
+        ].slice(0, 12);
+      }
+    } catch {
+      // Function may not be installed yet — ignore.
+    }
+
+    const sources = mergedSources.filter((item) => {
       if (selectedSource === "All Sources") return true;
 
       return (

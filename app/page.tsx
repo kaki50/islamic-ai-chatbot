@@ -51,6 +51,7 @@ const TEXTS: Record<
     priceMonth: string;
     priceYear: string;
     freeFeat: string;
+    freeFeat2: string;
     premFeat1: string;
     premFeat2: string;
     leftToday: string;
@@ -96,6 +97,7 @@ const TEXTS: Record<
     priceMonth: "Rs 1,000 / month",
     priceYear: "≈ $3.61 / month, billed monthly by card",
     freeFeat: "10 questions per day",
+    freeFeat2: "Answers from the Qur'an and Hadith, with references",
     premFeat1: "Unlimited questions",
     premFeat2: "Chats saved in your account, on every device",
     leftToday: "Questions left today: {n}",
@@ -147,6 +149,7 @@ const TEXTS: Record<
     priceMonth: "Rs 1,000 / mahina",
     priceYear: "≈ $3.61 / mahina, har mahine card se",
     freeFeat: "Roz 10 sawal",
+    freeFeat2: "Qur'an o Hadith se jawab, hawalon ke saath",
     premFeat1: "Bila hadd sawal",
     premFeat2: "Chats account mein mehfooz, har device par",
     leftToday: "Aaj ke baqi sawal: {n}",
@@ -198,6 +201,7 @@ const TEXTS: Record<
     priceMonth: "Rs 1,000 / مہینہ",
     priceYear: "≈ $3.61 / مہینہ، ہر ماہ کارڈ سے",
     freeFeat: "روز 10 سوالات",
+    freeFeat2: "قرآن و حدیث سے جواب، حوالوں کے ساتھ",
     premFeat1: "لا محدود سوالات",
     premFeat2: "چیٹس اکاؤنٹ میں محفوظ، ہر ڈیوائس پر",
     leftToday: "آج کے باقی سوالات: {n}",
@@ -1594,7 +1598,8 @@ export default function Home() {
 
             <div
               style={{
-                border: "1.5px solid #dfe7df",
+                border: `2px solid ${GREEN}`,
+                background: "linear-gradient(180deg, #f0faf4, #e2f4e9)",
                 borderRadius: "14px",
                 padding: "14px 16px",
                 marginBottom: "12px",
@@ -1602,15 +1607,27 @@ export default function Home() {
             >
               <div
                 dir="auto"
-                style={{ fontWeight: 700, fontSize: "15.5px", color: "#33413a" }}
+                style={{ fontWeight: 800, fontSize: "16px", color: GREEN_DARK }}
               >
-                {t.freeName} — {t.priceFree}
+                {t.freeName}
               </div>
               <div
                 dir="auto"
-                style={{ fontSize: "13.5px", color: "#68766c", marginTop: "4px" }}
+                style={{
+                  fontWeight: 800,
+                  fontSize: "19px",
+                  color: GREEN_DARK,
+                  marginTop: "5px",
+                }}
+              >
+                {t.priceFree}
+              </div>
+              <div
+                dir="auto"
+                style={{ fontSize: "13.5px", color: "#44524a", marginTop: "7px", lineHeight: 1.6 }}
               >
                 ✓ {t.freeFeat}
+                <br />✓ {t.freeFeat2}
               </div>
             </div>
 
